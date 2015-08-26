@@ -1,0 +1,11 @@
+ABC.Model/obj/Debug/
+ABC.Model/bin/Debug/
+ABC/bin
+ABC/obj/
+packages/
+ABC.DB/obj/
+ABC.Core/obj/
+ABC.Core/bin/
+ABC.Model/Properties/
+ABC/Properties/
+ABC.DB/Properties/
