@@ -35,7 +35,7 @@ namespace ABC.Core
 
             List<string> dapperFields = new List<string>();
             rootFields.ForEach(f => { dapperFields.Add("@" + f); });
-            string tableName = TableHelper.GetTableName<T>();
+            string tableName = QueryHelper.GetTableName<T>();
             StringBuilder query = new StringBuilder();
 
             query.AppendLine("INSERT INTO " + tableName + " (");
@@ -67,7 +67,7 @@ namespace ABC.Core
 
             List<string> dapperFields = new List<string>();
             rootFields.ForEach(f => { dapperFields.Add("@" + f); });
-            string tableName = TableHelper.GetTableName<T>();
+            string tableName = QueryHelper.GetTableName<T>();
             StringBuilder query = new StringBuilder();
 
             query.AppendLine("INSERT INTO " + tableName + " (");
@@ -134,8 +134,8 @@ namespace ABC.Core
         {
             string[] result = new string[2];
             PropertyInfo[] table1PInfos = table1.GetProperties();
-            string table1NameInDb = TableHelper.GetTableName(table1);
-            string table2NameInDb = TableHelper.GetTableName(table2);
+            string table1NameInDb = QueryHelper.GetTableName(table1);
+            string table2NameInDb = QueryHelper.GetTableName(table2);
 
             PropertyInfo pForeignKeyInfosTable1 = table1PInfos.FirstOrDefault(p => p.GetCustomAttributes(true)
                 .Any(a => (a as ForeignKeyAttribute) != null && (a as ForeignKeyAttribute).Name == table2NameInDb));
@@ -215,7 +215,7 @@ namespace ABC.Core
         /// </summary>
         public static int Count<T>(IDbConnection db)
         {
-            SQlQuery query = new SQlQuery(TableHelper.GetTableName<T>());
+            SQlQuery query = new SQlQuery(QueryHelper.GetTableName<T>());
             string newSql = @"SELECT COUNT(1) FROM ( " + query.Query + " ) as Extend";
             var result = db.Query<int>(newSql).FirstOrDefault();
             return result;
@@ -228,7 +228,7 @@ namespace ABC.Core
         public static int Count<T>(Expression<Func<T, bool>> expression, IDbConnection db)
         {
             var body = expression.Body as BinaryExpression;
-            SQlQuery query = new SQlQuery(TableHelper.GetTableName<T>());
+            SQlQuery query = new SQlQuery(QueryHelper.GetTableName<T>());
             WalkTree<T>(expression, ref query);
 
             string newSql = @"SELECT COUNT(1) FROM ( " + query.Query + " ) as Extend";
@@ -241,7 +241,7 @@ namespace ABC.Core
         private static QueryResult<TSource> CommonOrder<TSource, TKey>(QueryResult<TSource> source, Expression<Func<TSource, TKey>> keySelector, bool isASC)
         {
             string orderBy = string.Empty;
-            string tableName = TableHelper.GetTableName<TSource>();
+            string tableName = QueryHelper.GetTableName<TSource>();
             //item.Member.Name -- name of properties
             string[] expression = keySelector.Body.ToString().Split('.');
             int count = expression.Count();
@@ -328,7 +328,7 @@ namespace ABC.Core
         public static bool Any<T>(IDbConnection db, Expression<Func<T, bool>> expression)
         {
             var body = expression.Body as BinaryExpression;
-            SQlQuery query = new SQlQuery(TableHelper.GetTableName<T>());
+            SQlQuery query = new SQlQuery(QueryHelper.GetTableName<T>());
             WalkTree<T>(expression, ref query);
 
             string newSql = @"SELECT CASE WHEN ( EXISTS ( " + query.Query + " )) THEN cast(1 as bit) ELSE cast(0 as bit) END";
@@ -343,7 +343,7 @@ namespace ABC.Core
         /// </summary>
         public static bool Any<T>(IDbConnection db)
         {
-            SQlQuery sql = new SQlQuery(TableHelper.GetTableName<T>());
+            SQlQuery sql = new SQlQuery(QueryHelper.GetTableName<T>());
             string newSql = @"SELECT CASE WHEN ( EXISTS ( " + sql.Query + " )) THEN cast(1 as bit) ELSE cast(0 as bit) END";
             var result = db.Query<bool>(newSql).FirstOrDefault();
             return result;
@@ -353,14 +353,14 @@ namespace ABC.Core
         #region Get
         public static QueryResult<T> Get<T>()
         {
-            SQlQuery query = new SQlQuery(TableHelper.GetTableName<T>());
+            SQlQuery query = new SQlQuery(QueryHelper.GetTableName<T>());
             return new QueryResult<T>(query);
         }
 
         public static QueryResult<T> Get<T>(Expression<Func<T, bool>> expression)
         {
             var body = expression.Body as BinaryExpression;
-            SQlQuery query = new SQlQuery(TableHelper.GetTableName<T>());
+            SQlQuery query = new SQlQuery(QueryHelper.GetTableName<T>());
             WalkTree<T>(expression, ref query);
 
             return new QueryResult<T>(query);
@@ -374,7 +374,7 @@ namespace ABC.Core
             if (body == null)
                 throw new Exception("This function is not supported anonymous type.");
 
-            string tableName = TableHelper.GetTableName<TSource>();
+            string tableName = QueryHelper.GetTableName<TSource>();
             List<string> selected = new List<string>();
             foreach (var item in body.Bindings)
             {
@@ -555,7 +555,7 @@ namespace ABC.Core
                                 newProperties += '.';
                             }
                         }
-                        string tableName = TableHelper.GetTableName<T>();
+                        string tableName = QueryHelper.GetTableName<T>();
                         GetJoinOperation(typeof(T), newProperties, ref joinOperator);
                         GetWhereOperation(linkOperator, newProperties, ref whereCondition);
                     }
@@ -575,18 +575,13 @@ namespace ABC.Core
                 GetCondition<T>(linkOperator, arrUnary, ref condition, ref query);
         }
 
-        /// <summary>
-        /// Walks the tree.
-        /// </summary>
-        /// <param name="body">The body.</param>
-        /// <param name="linkingType">Type of the linking.</param>
-        /// <param name="queryProperties">The query properties.</param>
+
         private static void WalkTree<T>(BinaryExpression body, ExpressionType linkingType, ref SQlQuery query)
         {
             List<QueryParameter> queryProperties = new List<QueryParameter>();
             if (body.NodeType != ExpressionType.AndAlso && body.NodeType != ExpressionType.OrElse)
             {
-                string tableName = TableHelper.GetTableName<T>();
+                string tableName = QueryHelper.GetTableName<T>();
                 var slides = body.Left.ToString().Split(new char[] { '.' });
                 string[] conditions = new string[slides.Count()];
                 GetExactlyNameParam(typeof(T), slides, ref conditions);
@@ -594,7 +589,7 @@ namespace ABC.Core
                 string propertyName = string.Join(".", conditions.Where(c => !string.IsNullOrEmpty(c)));
                 if (body.Left.NodeType == ExpressionType.Convert)
                 {
-                    // hack to remove the trailing ) when convering.
+                    //Remove the trailing ) when convering.
                     propertyName = propertyName.Replace(")", string.Empty);
                 }
 
@@ -670,7 +665,6 @@ namespace ABC.Core
 
         private static SQlQuery BuildCondition<T>(Expression expression, BinaryExpression body, SQlQuery query)
         {
-            //var expression = body.Left;
             BinaryExpression binary = expression as BinaryExpression;
             UnaryExpression unary = expression as UnaryExpression;
             MethodCallExpression methodCall;
@@ -696,38 +690,23 @@ namespace ABC.Core
             return query;
         }
 
-        
+
         private static void GetJoinOperation(Type rootTableName, string propertyName, ref List<string> joins)
         {
             string[] elements = propertyName.Split(new char[] { '.' });
-
             string tableName = elements[0];
-
             PropertyInfo[] table2PInfos = rootTableName.GetProperties();
-
-            //PropertyInfo primaryKeyTable2 = table2PInfos.FirstOrDefault(p => string.Compare(HelperExtension.GetTableName(p.PropertyType.GetType()), tableName, true) == 0);
-
-            foreach (var item in table2PInfos)
-            {
-                var test = string.Empty;
-            }
-
-            PropertyInfo primaryKeyTable2 = table2PInfos.FirstOrDefault(p => string.Compare(TableHelper.GetTableName(p.PropertyType), tableName, true) == 0);
-
-            //string keyJoin = (tableName.LastOrDefault() == 's' ? tableName.Substring(0, tableName.Length - 1) : tableName) + "Id";
+            PropertyInfo primaryKeyTable2 = table2PInfos.FirstOrDefault(p => string.Compare(QueryHelper.GetTableName(p.PropertyType), tableName, true) == 0);
             string[] keyJoin = GetForeignKeyColumn(rootTableName, primaryKeyTable2.PropertyType);
             StringBuilder joinComment = new StringBuilder();
             joinComment.Append("JOIN ");
             joinComment.Append(tableName);
-            //joinComment.Append(" ON " + tableName + "." + keyJoin + " = " + rootTableName + "." + keyJoin);
             joinComment.Append(" ON " + keyJoin[0] + " = " + keyJoin[1]);
             joins.Add(joinComment.ToString());
 
             if (elements.Count() > 2)
             {
                 string newPropertyName = elements[1] + "." + elements[2];
-                //GetJoinOperation(tableName, newPropertyName, ref joins);
-
                 Type destinationType = rootTableName.GetProperty(tableName).PropertyType;
 
                 GetJoinOperation(destinationType, newPropertyName, ref joins);
@@ -741,11 +720,7 @@ namespace ABC.Core
             string[] elements = propertyName.Split(new char[] { '.' });
 
             if (elements.Count() > 2)
-            {
                 throw new Exception("Wrong condition");
-                //string newPropertyName = elements[1] + "." + elements[2];
-                //GetWhereOperation(linkOperator, elements[0], newPropertyName, ref where);
-            }
 
             string tableName = elements[0];
             string primaryKey = (tableName.LastOrDefault() == 's' ? tableName.Substring(0, tableName.Length - 1) : tableName) + "Id";
@@ -756,21 +731,6 @@ namespace ABC.Core
             partialComment.Append("(LEN(" + tableName + '.' + elements.LastOrDefault() + ") = 0))");
 
             where = partialComment.ToString();
-        }
-
-        private static string GetPropertyName(BinaryExpression body)
-        {
-            string[] elements = body.Left.ToString().Split(new char[] { '.' });
-            string removed = elements[0];
-            string propertyName = body.Left.ToString().Replace(removed + ".", string.Empty);
-
-            if (body.Left.NodeType == ExpressionType.Convert)
-            {
-                // hack to remove the trailing ) when convering.
-                propertyName = propertyName.Replace(")", string.Empty);
-            }
-
-            return propertyName;
         }
 
         private static string GetOperator(ExpressionType type)
@@ -798,28 +758,5 @@ namespace ABC.Core
             }
         }
         #endregion
-    }
-
-
-    public static class TableHelper
-    {
-        public static string GetTableName<T>()
-        {
-            var attributes = typeof(T).GetCustomAttributes(typeof(TableAttribute), true);
-            if (attributes.Any())
-                return (attributes[0] as TableAttribute).Name;
-
-            Type type = typeof(T);
-            return type.Name;
-        }
-
-        public static string GetTableName(Type attributeType)
-        {
-            var attributes = attributeType.GetCustomAttributes(typeof(TableAttribute), true);
-            if (attributes.Any())
-                return (attributes[0] as TableAttribute).Name;
-
-            return attributeType.Name;
-        }
     }
 }

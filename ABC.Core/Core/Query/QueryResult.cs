@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations.Schema;
 using System.Dynamic;
 using System.Linq;
 using System.Text;
@@ -28,26 +29,7 @@ namespace ABC.Core
             }
             set { _result.Sql = value; }
         }
-
-        ///// <summary>
-        ///// Gets the param.
-        ///// </summary>
-        ///// <value>
-        ///// The param.
-        ///// </value>
-        //public dynamic Param
-        //{
-        //    get
-        //    {
-        //        return _result.Param;
-        //    }
-        //}
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="QueryResult" /> class.
-        /// </summary>
-        /// <param name="sql">The SQL.</param>
-        /// <param name="param">The param.</param>
+        
         public QueryResult(SQlQuery sql)
         {
             _result = new QuerySource<SQlQuery>(sql);
@@ -63,8 +45,7 @@ namespace ABC.Core
 
         public SQlQuery Sql { get; set; }
     }
-
-
+    
     public class SQlQuery
     {
         public List<string> JoinContidion { get; set; }
@@ -146,8 +127,7 @@ namespace ABC.Core
                 if (!string.IsNullOrEmpty(SpecialWhere) || (normalWhere != null && normalWhere.Any()))
                     builder.AppendLine("WHERE");
                 builder.AppendLine(SpecialWhere);
-
-
+                
                 for (int i = 0; i < normalWhere.Count(); i++)
                 {
                     QueryParameter item = normalWhere[i];
@@ -168,7 +148,6 @@ namespace ABC.Core
                 return builder.ToString();
             }
         }
-
 
         internal static void BuildQuery(IDictionary<string, object> expando, StringBuilder builder)
         {
@@ -202,7 +181,7 @@ namespace ABC.Core
         }
     }
 
-    public static class ExtensionHelper
+    public static class QueryHelper
     {
         public static void AddQueryParameter(this SQlQuery query, QueryParameter parameters)
         {
@@ -222,6 +201,25 @@ namespace ABC.Core
 
             if (!string.IsNullOrEmpty(whereCondition))
                 query.WhereCondition.Add(whereCondition);
+        }
+
+        public static string GetTableName<T>()
+        {
+            var attributes = typeof(T).GetCustomAttributes(typeof(TableAttribute), true);
+            if (attributes.Any())
+                return (attributes[0] as TableAttribute).Name;
+
+            Type type = typeof(T);
+            return type.Name;
+        }
+
+        public static string GetTableName(Type attributeType)
+        {
+            var attributes = attributeType.GetCustomAttributes(typeof(TableAttribute), true);
+            if (attributes.Any())
+                return (attributes[0] as TableAttribute).Name;
+
+            return attributeType.Name;
         }
     }
 }
