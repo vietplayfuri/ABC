@@ -17,6 +17,61 @@ namespace ABC.Core
         #region Doing
 
 
+
+        //public static decimal? Min(this IEnumerable<decimal?> source);
+        //public static decimal? Sum<TSource>(this IEnumerable<TSource> source, Func<TSource, int> selector);
+        //public static decimal? Max<TSource>(this IEnumerable<TSource> source, Func<TSource, decimal?> selector);
+        #endregion
+
+        #region Update by Id //TODO: Later, can use expression to get conditon for updating
+        /// <summary>
+        /// Update entity
+        /// </summary>
+        public static bool Update<T>(T entity, IDbConnection db)
+        {
+            List<string> rootFields = new List<string>();
+            PropertyInfo[] pinfos = entity.GetType().GetProperties();
+            foreach (PropertyInfo prop in pinfos)
+            {
+                object[] attrs = prop.GetCustomAttributes(true);
+                if (attrs.Any(a => (a as External) != null || (a as PrimaryKey) != null))
+                    continue;
+
+                rootFields.Add("@" + prop.Name);
+            }
+
+            StringBuilder query = new StringBuilder();
+            query.AppendLine("UPDATE " + QueryHelper.GetTableName<T>());
+            query.AppendLine("SET");
+            query.AppendLine(string.Join(",", rootFields));
+            query.AppendLine("WHERE");
+            string primaryKey = GetPrimaryIdColumn(typeof(T));
+            query.AppendLine(primaryKey + " = @" + primaryKey);
+
+            string sqlQuery = query.ToString();
+            return 1 == db.Execute(sqlQuery, entity);
+        }
+        #endregion
+        
+        #region Delete by Id //TODO: Later, can use expression to get conditon for deleting
+        /// <summary>
+        /// Delete entity
+        /// </summary>
+        public static bool Delete<T>(int id, IDbConnection db)
+        {
+            StringBuilder query = new StringBuilder();
+            query.AppendLine("DELETE FROM ");
+            query.AppendLine(QueryHelper.GetTableName<T>());
+            query.AppendLine(" WHERE ");
+            string primaryKey = GetPrimaryIdColumn(typeof(T));
+            query.AppendLine(primaryKey + " = @" + primaryKey);
+            string sqlQuery = query.ToString();
+
+            return 1 == db.Execute(sqlQuery, new { primaryKey = id });
+        }
+        #endregion
+
+        #region Create
         /// <summary>
         /// Create entity - used for tables have primary key
         /// </summary>
@@ -72,7 +127,6 @@ namespace ABC.Core
 
             query.AppendLine("INSERT INTO " + tableName + " (");
             query.AppendLine(string.Join(",", rootFields) + ")");
-            //query.AppendLine("Output Inserted." + GetPrimaryIdColumn(tableName));
             query.AppendLine("VALUES(" + string.Join(",", dapperFields) + ")");
 
             string sqlQuery = query.ToString();
@@ -80,135 +134,9 @@ namespace ABC.Core
             return 1 == db.Execute(sqlQuery, entity);
         }
 
-
-        /// <summary>
-        /// Update entity directly
-        /// </summary>
-        public static bool Update<T>(T entity)
-        {
-            return true;
-        }
-
-        /// <summary>
-        /// Update entity with transaction
-        /// </summary>
-        public static bool Update<T>(T entity, IDbConnection db)
-        {
-            return true;
-        }
-
-
-        /// <summary>
-        /// Delete entity with transaction
-        /// </summary>
-        public static bool Delete<T>(int Id, IDbConnection db)
-        {
-            return true;
-        }
-
-
-        /// <summary>
-        /// Delete entity directly
-        /// </summary>
-        public static bool Delete<T>(int Id)
-        {
-            return true;
-        }
-
-
-        //public static int Count<TSource>(this IEnumerable<TSource> source, Func<TSource, bool> predicate);
-        //public static int Count<TSource>(this IEnumerable<TSource> source);
-
-        //public static decimal? Min(this IEnumerable<decimal?> source);
-        //public static decimal? Sum<TSource>(this IEnumerable<TSource> source, Func<TSource, int> selector);
-        //public static decimal? Max<TSource>(this IEnumerable<TSource> source, Func<TSource, decimal?> selector);
         #endregion
 
         #region Count
-
-
-        /// <summary>
-        /// result[0] = result[1]
-        /// </summary>
-        private static string[] GetForeignKeyColumn(Type table1, Type table2)
-        {
-            string[] result = new string[2];
-            PropertyInfo[] table1PInfos = table1.GetProperties();
-            string table1NameInDb = QueryHelper.GetTableName(table1);
-            string table2NameInDb = QueryHelper.GetTableName(table2);
-
-            PropertyInfo pForeignKeyInfosTable1 = table1PInfos.FirstOrDefault(p => p.GetCustomAttributes(true)
-                .Any(a => (a as ForeignKeyAttribute) != null && (a as ForeignKeyAttribute).Name == table2NameInDb));
-            if (pForeignKeyInfosTable1 != null)
-            {
-                result[0] = table1NameInDb + '.' + pForeignKeyInfosTable1.Name;
-                result[1] = table2NameInDb + '.' + pForeignKeyInfosTable1.Name;
-                return result;
-            }
-            else
-            {
-                PropertyInfo[] table2PInfos = table2.GetProperties();
-                PropertyInfo pForeignKeyInfosTable2 = table2PInfos.FirstOrDefault(p => p.GetCustomAttributes(true)
-                    .Any(a => (a as ForeignKeyAttribute) != null && (a as ForeignKeyAttribute).Name == table1NameInDb));
-                if (pForeignKeyInfosTable2 != null)
-                {
-                    result[0] = table1NameInDb + '.' + pForeignKeyInfosTable1.Name;
-                    result[1] = table2NameInDb + '.' + pForeignKeyInfosTable1.Name;
-                    return result;
-                }
-
-                //External fields of table 1
-                //search id of table 2 in table 1
-                PropertyInfo primaryKeyTable2 = table2PInfos.FirstOrDefault(p => string.Compare(p.Name, "id", true) == 0);
-                if (primaryKeyTable2 == null)
-                    primaryKeyTable2 = table2PInfos.FirstOrDefault(p => p.GetCustomAttributes(true).Any(a => (a as PrimaryKey) != null));
-                if (primaryKeyTable2 == null)
-                    throw new Exception("Could not found the primary key in entity: " + table1.FullName);
-
-                PropertyInfo allPExternalTable2InTable1 = table1PInfos.FirstOrDefault(p => string.Compare(p.Name, primaryKeyTable2.Name, true) == 0);
-
-                if (allPExternalTable2InTable1 != null) // primary key of table 2 is existed in table 1
-                {
-                    result[0] = table1NameInDb + '.' + primaryKeyTable2.Name;
-                    result[1] = table2NameInDb + '.' + primaryKeyTable2.Name;
-                    return result;
-                }
-                else
-                {
-                    //search id of table 1 in table 2
-                    PropertyInfo primaryKeyTable1 = table1PInfos.FirstOrDefault(p => string.Compare(p.Name, "id", true) == 0);
-                    if (primaryKeyTable1 == null)
-                        primaryKeyTable1 = table1PInfos.FirstOrDefault(p => p.GetCustomAttributes(true).Any(a => (a as PrimaryKey) != null));
-                    if (primaryKeyTable1 == null)
-                        throw new Exception("Could not found the primary key in entity: " + table1.FullName);
-
-                    PropertyInfo pExternalTable1InTable2 = table2PInfos.FirstOrDefault(p => string.Compare(p.Name, primaryKeyTable1.Name, true) == 0);
-                    if (pExternalTable1InTable2 != null)
-                    {
-                        result[0] = table1NameInDb + '.' + primaryKeyTable1.Name;
-                        result[1] = table2NameInDb + '.' + primaryKeyTable1.Name;
-                        return result;
-                    }
-                    else
-                        throw new Exception("Could not found the foreign key between two entities: " + table1.FullName + " and " + table2.FullName);
-                }
-            }
-        }
-
-        private static string GetPrimaryIdColumn(Type table)
-        {
-            PropertyInfo[] table1PInfos = table.GetProperties();
-            PropertyInfo primaryKeyTable1 =
-                table1PInfos.FirstOrDefault(p => string.Compare(p.Name, "id", true) == 0);
-            if (primaryKeyTable1 == null)
-                primaryKeyTable1 = table1PInfos.FirstOrDefault(p => p.GetCustomAttributes(true).Any(a => (a as PrimaryKey) != null));
-            if (primaryKeyTable1 == null)
-                throw new Exception("Count not find the primaryKey of table: " + table.FullName);
-
-            return primaryKeyTable1.Name;
-        }
-
-
         /// <summary>
         /// "Count" keyword is used without expression -- 
         /// Way to use: [Table].Count()
@@ -483,7 +411,6 @@ namespace ABC.Core
         //}
         #endregion
 
-
         #region Return results
         public static TSource FirstOrDefault<TSource>(this QueryResult<TSource> source, IDbConnection db)
         {
@@ -756,6 +683,88 @@ namespace ABC.Core
                 default:
                     throw new NotImplementedException();
             }
+        }
+
+
+        /// <summary>
+        /// result[0] = result[1]
+        /// </summary>
+        private static string[] GetForeignKeyColumn(Type table1, Type table2)
+        {
+            string[] result = new string[2];
+            PropertyInfo[] table1PInfos = table1.GetProperties();
+            string table1NameInDb = QueryHelper.GetTableName(table1);
+            string table2NameInDb = QueryHelper.GetTableName(table2);
+
+            PropertyInfo pForeignKeyInfosTable1 = table1PInfos.FirstOrDefault(p => p.GetCustomAttributes(true)
+                .Any(a => (a as ForeignKeyAttribute) != null && (a as ForeignKeyAttribute).Name == table2NameInDb));
+            if (pForeignKeyInfosTable1 != null)
+            {
+                result[0] = table1NameInDb + '.' + pForeignKeyInfosTable1.Name;
+                result[1] = table2NameInDb + '.' + pForeignKeyInfosTable1.Name;
+                return result;
+            }
+            else
+            {
+                PropertyInfo[] table2PInfos = table2.GetProperties();
+                PropertyInfo pForeignKeyInfosTable2 = table2PInfos.FirstOrDefault(p => p.GetCustomAttributes(true)
+                    .Any(a => (a as ForeignKeyAttribute) != null && (a as ForeignKeyAttribute).Name == table1NameInDb));
+                if (pForeignKeyInfosTable2 != null)
+                {
+                    result[0] = table1NameInDb + '.' + pForeignKeyInfosTable1.Name;
+                    result[1] = table2NameInDb + '.' + pForeignKeyInfosTable1.Name;
+                    return result;
+                }
+
+                //External fields of table 1
+                //search id of table 2 in table 1
+                PropertyInfo primaryKeyTable2 = table2PInfos.FirstOrDefault(p => string.Compare(p.Name, "id", true) == 0);
+                if (primaryKeyTable2 == null)
+                    primaryKeyTable2 = table2PInfos.FirstOrDefault(p => p.GetCustomAttributes(true).Any(a => (a as PrimaryKey) != null));
+                if (primaryKeyTable2 == null)
+                    throw new Exception("Could not found the primary key in entity: " + table1.FullName);
+
+                PropertyInfo allPExternalTable2InTable1 = table1PInfos.FirstOrDefault(p => string.Compare(p.Name, primaryKeyTable2.Name, true) == 0);
+
+                if (allPExternalTable2InTable1 != null) // primary key of table 2 is existed in table 1
+                {
+                    result[0] = table1NameInDb + '.' + primaryKeyTable2.Name;
+                    result[1] = table2NameInDb + '.' + primaryKeyTable2.Name;
+                    return result;
+                }
+                else
+                {
+                    //search id of table 1 in table 2
+                    PropertyInfo primaryKeyTable1 = table1PInfos.FirstOrDefault(p => string.Compare(p.Name, "id", true) == 0);
+                    if (primaryKeyTable1 == null)
+                        primaryKeyTable1 = table1PInfos.FirstOrDefault(p => p.GetCustomAttributes(true).Any(a => (a as PrimaryKey) != null));
+                    if (primaryKeyTable1 == null)
+                        throw new Exception("Could not found the primary key in entity: " + table1.FullName);
+
+                    PropertyInfo pExternalTable1InTable2 = table2PInfos.FirstOrDefault(p => string.Compare(p.Name, primaryKeyTable1.Name, true) == 0);
+                    if (pExternalTable1InTable2 != null)
+                    {
+                        result[0] = table1NameInDb + '.' + primaryKeyTable1.Name;
+                        result[1] = table2NameInDb + '.' + primaryKeyTable1.Name;
+                        return result;
+                    }
+                    else
+                        throw new Exception("Could not found the foreign key between two entities: " + table1.FullName + " and " + table2.FullName);
+                }
+            }
+        }
+
+        private static string GetPrimaryIdColumn(Type table)
+        {
+            PropertyInfo[] table1PInfos = table.GetProperties();
+            PropertyInfo primaryKeyTable1 =
+                table1PInfos.FirstOrDefault(p => string.Compare(p.Name, "id", true) == 0);
+            if (primaryKeyTable1 == null)
+                primaryKeyTable1 = table1PInfos.FirstOrDefault(p => p.GetCustomAttributes(true).Any(a => (a as PrimaryKey) != null));
+            if (primaryKeyTable1 == null)
+                throw new Exception("Count not find the primaryKey of table: " + table.FullName);
+
+            return primaryKeyTable1.Name;
         }
         #endregion
     }
