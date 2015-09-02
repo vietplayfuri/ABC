@@ -15,9 +15,7 @@ namespace ABC.Core
     public static class DBHelper
     {
         #region Doing
-
-
-
+        //Get all related object
         //public static decimal? Min(this IEnumerable<decimal?> source);
         //public static decimal? Sum<TSource>(this IEnumerable<TSource> source, Func<TSource, int> selector);
         //public static decimal? Max<TSource>(this IEnumerable<TSource> source, Func<TSource, decimal?> selector);
@@ -37,7 +35,7 @@ namespace ABC.Core
                 if (attrs.Any(a => (a as External) != null || (a as PrimaryKey) != null))
                     continue;
 
-                rootFields.Add("@" + prop.Name);
+                rootFields.Add(prop.Name + " = @" + prop.Name);
             }
 
             StringBuilder query = new StringBuilder();
@@ -52,7 +50,7 @@ namespace ABC.Core
             return 1 == db.Execute(sqlQuery, entity);
         }
         #endregion
-        
+
         #region Delete by Id //TODO: Later, can use expression to get conditon for deleting
         /// <summary>
         /// Delete entity
@@ -83,8 +81,8 @@ namespace ABC.Core
             foreach (PropertyInfo prop in pinfos)
             {
                 object[] attrs = prop.GetCustomAttributes(true);
-                bool isExternal = attrs.Any(a => (a as External) != null);
-                if (isExternal) continue;
+                bool isIgnored = attrs.Any(a => (a as External) != null || (a as PrimaryKey) != null);
+                if (isIgnored) continue;
                 rootFields.Add(prop.Name);
             }
 
@@ -298,6 +296,77 @@ namespace ABC.Core
         #region Select
         public static QueryResult<TResult> Select<TSource, TResult>(this QueryResult<TSource> source, Expression<Func<TSource, TResult>> keySelector)
         {
+            var body = keySelector.Body as NewExpression;
+            if (body != null)
+                return source.SelectAnonymous(keySelector);
+            else
+                return source.SelectNormal(keySelector);
+        }
+
+        private static QueryResult<TResult> SelectAnonymous<TSource, TResult>(this QueryResult<TSource> source, Expression<Func<TSource, TResult>> keySelector)
+        {
+            var body = keySelector.Body as NewExpression;
+            if (body == null)
+                throw new Exception("This function is not supported anonymous type.");
+
+            string tableName = QueryHelper.GetTableName<TSource>();
+            List<string> selected = new List<string>();
+            foreach (var item in body.Arguments)
+            {
+                //item.Member.Name -- name of properties
+                string[] expression = item.ToString().Split('.');
+                bool isRemoved = false;
+                for (int i = 0; i < expression.Count(); i++)
+                {
+                    if (isRemoved)
+                        expression[i] = string.Empty;
+
+                    if (expression[i].Contains("()"))
+                    {
+                        expression[i] = string.Empty;
+                        isRemoved = true;
+                    }
+                }
+
+                expression = expression.Where(e => !string.IsNullOrEmpty(e)).ToArray();
+                int count = expression.Count();
+                if (count == 2)
+                    selected.Add(tableName + "." + expression[count - 1]);
+                else
+                {
+                    var slides = item.ToString().Split(new char[] { '.' });
+                    string[] conditions = new string[slides.Count()];
+                    GetExactlyNameParam(typeof(TSource), slides, ref conditions);
+                    selected.Add(string.Join(".", conditions.Where(c => !string.IsNullOrEmpty(c))));
+                }
+            }
+
+            List<string> joinOperator = new List<string>();
+
+            foreach (var item in selected)
+                if (string.Compare(tableName, item.Split('.')[0]) != 0)
+                    GetJoinOperation(typeof(TSource), item, ref joinOperator);
+
+            source.Sql.AddJoinOperator(joinOperator);
+            for (int i = 0; i < selected.Count(); i++)
+            {
+                string[] splited = selected[i].Split('.');
+                if (splited.Count() > 2)
+                    selected[i] = splited[splited.Count() - 2] + "." + splited.LastOrDefault();
+            }
+
+            for (int i = 0; i < body.Members.Count; i++)
+            {
+                selected[i] += " AS " + body.Members[i].Name;
+            }
+
+            string select = string.Join(", ", selected);
+            source.Sql.Select = select;
+            QueryResult<TResult> result = new QueryResult<TResult>(source.Sql);
+            return result;
+        }
+        private static QueryResult<TResult> SelectNormal<TSource, TResult>(this QueryResult<TSource> source, Expression<Func<TSource, TResult>> keySelector)
+        {
             var body = keySelector.Body as MemberInitExpression;
             if (body == null)
                 throw new Exception("This function is not supported anonymous type.");
@@ -348,67 +417,16 @@ namespace ABC.Core
                     selected[i] = splited[splited.Count() - 2] + "." + splited.LastOrDefault();
             }
 
+            for (int i = 0; i < body.Bindings.Count; i++)
+            {
+                selected[i] += " AS " + body.Bindings[i].Member.Name;
+            }
+
             string select = string.Join(", ", selected);
             source.Sql.Select = select;
             QueryResult<TResult> result = new QueryResult<TResult>(source.Sql);
             return result;
         }
-
-        //TODO: can do it later
-        //public static QueryResult<T> Select<T>(Expression<Func<T, bool>> keySelector)
-        //{
-        //    SQlQuery source = new SQlQuery(HelperExtension.GetTableName<TSource>());
-
-        //    string orderBy = keySelector.Body.ToString().Split('.')[1];
-        //    var body = (MemberInitExpression)keySelector.Body;
-        //    string outputObject = typeof(TResult).Name;
-        //    string sourceObject = typeof(TSource).Name;
-
-        //    List<string> selected = new List<string>();
-        //    var rootInstance = Activator.CreateInstance(Type.GetType(typeof(TSource).FullName));
-        //    foreach (var item in body.Bindings)
-        //    {
-        //        //item.Member.Name -- name of properties
-        //        string[] expression = item.ToString().Split('.');
-        //        int count = expression.Count();
-        //        if (count == 2)
-        //            selected.Add(sourceObject + "." + expression[count - 1]);
-        //        else
-        //        {
-        //            var slides = item.ToString().Split(new char[] { '.' });
-        //            string[] conditions = new string[slides.Count()];
-        //            GetExactlyNameParam(typeof(TSource), slides, ref conditions);
-        //            selected.Add(string.Join(".", conditions.Where(c => !string.IsNullOrEmpty(c))));
-        //        }
-        //    }
-
-        //    List<string> joinOperator = new List<string>();
-        //    string tableName = HelperExtension.GetTableName<TSource>();
-        //    foreach (var item in selected)
-        //    {
-        //        if (string.Compare(tableName, item.Split('.')[0]) != 0)
-        //        {
-        //            GetJoinOperation(tableName, item, ref joinOperator);
-        //        }
-        //    }
-
-        //    source.AddJoinOperator(joinOperator);
-
-
-        //    for (int i = 0; i < selected.Count(); i++)
-        //    {
-        //        string[] splited = selected[i].Split('.');
-        //        if (splited.Count() > 2)
-        //        {
-        //            selected[i] = splited[splited.Count() - 2] + "." + splited.LastOrDefault();
-        //        }
-        //    }
-
-        //    string select = string.Join(", ", selected);
-        //    source.Select = select;
-        //    QueryResult<TResult> result = new QueryResult<TResult>(source);
-        //    return result;
-        //}
         #endregion
 
         #region Return results
@@ -430,24 +448,24 @@ namespace ABC.Core
         {
             var expression = exp.Body;
             var body = expression as BinaryExpression;
+            if (body != null)
+                WalkTree<T>(body, ExpressionType.Default, ref query);
+
             BinaryExpression binary = expression as BinaryExpression;
             UnaryExpression unary = expression as UnaryExpression;
             MethodCallExpression methodCall;
             if (binary == null)
+            {
                 if (unary != null)
-                {
                     methodCall = unary.Operand as MethodCallExpression;
-                }
                 else
-                {
                     methodCall = expression as MethodCallExpression;
-                    string strUnary = unary.ToString();
-                    string[] arrUnary = unary.ToString().Split('(');
-                    string condition = string.Empty;
-                    GetCondition<T>(string.Empty, arrUnary, ref condition, ref query);
-                }
 
-            WalkTree<T>(body, ExpressionType.Default, ref query);
+                string strUnary = unary.ToString();
+                string[] arrUnary = unary.ToString().Split('(');
+                string condition = string.Empty;
+                GetCondition<T>(string.Empty, arrUnary, ref condition, ref query);
+            }
         }
 
         private static void GetCondition<T>(string linkOperator, string[] arrUnary, ref string condition, ref SQlQuery query)
