@@ -9,9 +9,10 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>ABC</RootNamespace>
     <AssemblyName>ABC</AssemblyName>
-    <TargetFrameworkVersion>v4.5.2</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.6</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+    <TargetFrameworkProfile />
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <PlatformTarget>AnyCPU</PlatformTarget>
@@ -54,6 +55,10 @@
     <ProjectReference Include="..\ABC.Core\ABC.Core.csproj">
       <Project>{73c6fa2f-544c-4d6a-8a05-da9d99a749a3}</Project>
       <Name>ABC.Core</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\ABC.Model\ABC.Model.csproj">
+      <Project>{099ec293-1bcc-4c8c-86d8-793106ed08de}</Project>
+      <Name>ABC.Model</Name>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

@@ -9,12 +9,39 @@ using System.Linq.Expressions;
 using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
+using ABC.Utility;
+using ABC.Model;
 
 namespace ABC.Core
 {
     public static class DBHelper
     {
         #region Doing
+
+        #region [update objects by specific condition] and [update some fields in opbject by Id]
+        //TODO: need to enhance, error is known when run, not coding
+        private static void CheckValidUpdatedFields<T>(params Expression<Func<T, bool>>[] updatedFields)
+        {
+            foreach (var item in updatedFields)
+            {
+                BinaryExpression exp = item.Body as BinaryExpression;
+                if (exp == null)
+                    throw new Exception("This version is only support for BinaryExpression.");
+
+                if (exp.NodeType != ExpressionType.Equal)
+                    throw new Exception("Updated field is support [Equal] operation.");
+            }
+        }
+
+        private static bool Update<T>(IDbConnection db, T entity, params Expression<Func<T, bool>>[] updatedFields)
+        {
+            throw new Exception("This version is not support this action.");
+        }
+        #endregion
+
+
+
+
         //Get all related object
         //public static decimal? Min(this IEnumerable<decimal?> source);
         //public static decimal? Sum<TSource>(this IEnumerable<TSource> source, Func<TSource, int> selector);
@@ -25,7 +52,7 @@ namespace ABC.Core
         /// <summary>
         /// Update entity
         /// </summary>
-        public static bool Update<T>(T entity, IDbConnection db)
+        public static bool Update<T>(IDbConnection db, T entity)
         {
             List<string> rootFields = new List<string>();
             PropertyInfo[] pinfos = entity.GetType().GetProperties();
@@ -39,7 +66,7 @@ namespace ABC.Core
             }
 
             StringBuilder query = new StringBuilder();
-            query.AppendLine("UPDATE " + QueryHelper.GetTableName<T>());
+            query.AppendLine("UPDATE " + EXTable.GetTableName<T>());
             query.AppendLine("SET");
             query.AppendLine(string.Join(",", rootFields));
             query.AppendLine("WHERE");
@@ -49,6 +76,9 @@ namespace ABC.Core
             string sqlQuery = query.ToString();
             return 1 == db.Execute(sqlQuery, entity);
         }
+
+
+
         #endregion
 
         #region Delete by Id //TODO: Later, can use expression to get conditon for deleting
@@ -59,7 +89,7 @@ namespace ABC.Core
         {
             StringBuilder query = new StringBuilder();
             query.AppendLine("DELETE FROM ");
-            query.AppendLine(QueryHelper.GetTableName<T>());
+            query.AppendLine(EXTable.GetTableName<T>());
             query.AppendLine(" WHERE ");
             string primaryKey = GetPrimaryIdColumn(typeof(T));
             query.AppendLine(primaryKey + " = @" + primaryKey);
@@ -88,7 +118,7 @@ namespace ABC.Core
 
             List<string> dapperFields = new List<string>();
             rootFields.ForEach(f => { dapperFields.Add("@" + f); });
-            string tableName = QueryHelper.GetTableName<T>();
+            string tableName = EXTable.GetTableName<T>();
             StringBuilder query = new StringBuilder();
 
             query.AppendLine("INSERT INTO " + tableName + " (");
@@ -120,7 +150,7 @@ namespace ABC.Core
 
             List<string> dapperFields = new List<string>();
             rootFields.ForEach(f => { dapperFields.Add("@" + f); });
-            string tableName = QueryHelper.GetTableName<T>();
+            string tableName = EXTable.GetTableName<T>();
             StringBuilder query = new StringBuilder();
 
             query.AppendLine("INSERT INTO " + tableName + " (");
@@ -141,7 +171,7 @@ namespace ABC.Core
         /// </summary>
         public static int Count<T>(IDbConnection db)
         {
-            SQlQuery query = new SQlQuery(QueryHelper.GetTableName<T>());
+            SQlQuery query = new SQlQuery(EXTable.GetTableName<T>());
             string newSql = @"SELECT COUNT(1) FROM ( " + query.Query + " ) as Extend";
             var result = db.Query<int>(newSql).FirstOrDefault();
             return result;
@@ -154,7 +184,7 @@ namespace ABC.Core
         public static int Count<T>(Expression<Func<T, bool>> expression, IDbConnection db)
         {
             var body = expression.Body as BinaryExpression;
-            SQlQuery query = new SQlQuery(QueryHelper.GetTableName<T>());
+            SQlQuery query = new SQlQuery(EXTable.GetTableName<T>());
             WalkTree<T>(expression, ref query);
 
             string newSql = @"SELECT COUNT(1) FROM ( " + query.Query + " ) as Extend";
@@ -167,12 +197,21 @@ namespace ABC.Core
         private static QueryResult<TSource> CommonOrder<TSource, TKey>(QueryResult<TSource> source, Expression<Func<TSource, TKey>> keySelector, bool isASC)
         {
             string orderBy = string.Empty;
-            string tableName = QueryHelper.GetTableName<TSource>();
+
+            //string tableName = QueryHelper.GetTableName<TSource>();
+            //string tableName = source.Sql.RootTable;
+
             //item.Member.Name -- name of properties
             string[] expression = keySelector.Body.ToString().Split('.');
             int count = expression.Count();
             if (count == 2)
-                orderBy = tableName + "." + expression[count - 1];
+            {
+                if (source.Sql.Select.Any(s => string.Compare(s.Item3, expression[count - 1], true) == 0))
+                {
+                    orderBy = source.Sql.Select.FirstOrDefault(s => string.Compare(s.Item3, expression[count - 1], true) == 0).Item1;
+                }
+                else orderBy = source.Sql.RootTable + "." + expression[count - 1];
+            }
             else
             {
                 string[] conditions = new string[expression.Count()];
@@ -180,7 +219,7 @@ namespace ABC.Core
                 orderBy = string.Join(".", conditions.Where(c => !string.IsNullOrEmpty(c)));
             }
             List<string> joinOperator = new List<string>();
-            if (string.Compare(tableName, orderBy.Split('.')[0]) != 0)
+            if (string.Compare(source.Sql.RootTable, orderBy.Split('.')[0]) != 0)
             {
                 GetJoinOperation(typeof(TSource), orderBy, ref joinOperator);
             }
@@ -190,7 +229,7 @@ namespace ABC.Core
             var orders = orderBy.Split('.');
             if (orders.Count() > 2)
                 orderBy = orders[orders.Length - 2] + '.' + orders[orders.Length - 1];
-            source.Sql.OrderItems.Add(orderBy + (isASC ? " ASC " : " DESC "));
+            source.Sql.OrderItems.Add(orderBy + (isASC ? " ASC" : " DESC"));
             return source;
         }
 
@@ -221,7 +260,7 @@ namespace ABC.Core
         /// </summary>
         public static QueryResult<TSource> Skip<TSource>(this QueryResult<TSource> source, int count)
         {
-            if (string.IsNullOrEmpty(source.Sql.OrderBy))
+            if (source.Sql.OrderItems == null || !source.Sql.OrderItems.Any())
                 throw new Exception("The method 'OrderBy' must be called before the method 'Skip'.");
 
             source.Sql.Skip = count;
@@ -233,7 +272,7 @@ namespace ABC.Core
         /// </summary>
         public static QueryResult<TSource> Take<TSource>(this QueryResult<TSource> source, int count)
         {
-            if (string.IsNullOrEmpty(source.Sql.OrderBy))
+            if (source.Sql.OrderItems == null || !source.Sql.OrderItems.Any())
                 throw new Exception("The method 'OrderBy' must be called before the method 'Take'.");
 
             if (!source.Sql.Skip.HasValue)
@@ -254,7 +293,7 @@ namespace ABC.Core
         public static bool Any<T>(IDbConnection db, Expression<Func<T, bool>> expression)
         {
             var body = expression.Body as BinaryExpression;
-            SQlQuery query = new SQlQuery(QueryHelper.GetTableName<T>());
+            SQlQuery query = new SQlQuery(EXTable.GetTableName<T>());
             WalkTree<T>(expression, ref query);
 
             string newSql = @"SELECT CASE WHEN ( EXISTS ( " + query.Query + " )) THEN cast(1 as bit) ELSE cast(0 as bit) END";
@@ -269,7 +308,7 @@ namespace ABC.Core
         /// </summary>
         public static bool Any<T>(IDbConnection db)
         {
-            SQlQuery sql = new SQlQuery(QueryHelper.GetTableName<T>());
+            SQlQuery sql = new SQlQuery(EXTable.GetTableName<T>());
             string newSql = @"SELECT CASE WHEN ( EXISTS ( " + sql.Query + " )) THEN cast(1 as bit) ELSE cast(0 as bit) END";
             var result = db.Query<bool>(newSql).FirstOrDefault();
             return result;
@@ -279,14 +318,14 @@ namespace ABC.Core
         #region Get
         public static QueryResult<T> Get<T>()
         {
-            SQlQuery query = new SQlQuery(QueryHelper.GetTableName<T>());
+            SQlQuery query = new SQlQuery(EXTable.GetTableName<T>());
             return new QueryResult<T>(query);
         }
 
         public static QueryResult<T> Get<T>(Expression<Func<T, bool>> expression)
         {
             var body = expression.Body as BinaryExpression;
-            SQlQuery query = new SQlQuery(QueryHelper.GetTableName<T>());
+            SQlQuery query = new SQlQuery(EXTable.GetTableName<T>());
             WalkTree<T>(expression, ref query);
 
             return new QueryResult<T>(query);
@@ -309,7 +348,7 @@ namespace ABC.Core
             if (body == null)
                 throw new Exception("This function is not supported anonymous type.");
 
-            string tableName = QueryHelper.GetTableName<TSource>();
+            //string tableName = QueryHelper.GetTableName<TSource>();
             List<string> selected = new List<string>();
             foreach (var item in body.Arguments)
             {
@@ -331,7 +370,7 @@ namespace ABC.Core
                 expression = expression.Where(e => !string.IsNullOrEmpty(e)).ToArray();
                 int count = expression.Count();
                 if (count == 2)
-                    selected.Add(tableName + "." + expression[count - 1]);
+                    selected.Add(source.Sql.RootTable + "." + expression[count - 1]);
                 else
                 {
                     var slides = item.ToString().Split(new char[] { '.' });
@@ -344,7 +383,7 @@ namespace ABC.Core
             List<string> joinOperator = new List<string>();
 
             foreach (var item in selected)
-                if (string.Compare(tableName, item.Split('.')[0]) != 0)
+                if (string.Compare(source.Sql.RootTable, item.Split('.')[0]) != 0)
                     GetJoinOperation(typeof(TSource), item, ref joinOperator);
 
             source.Sql.AddJoinOperator(joinOperator);
@@ -354,24 +393,27 @@ namespace ABC.Core
                 if (splited.Count() > 2)
                     selected[i] = splited[splited.Count() - 2] + "." + splited.LastOrDefault();
             }
-
+            List<Tuple<string, string, string>> addedSelect = new List<Tuple<string, string, string>>();
             for (int i = 0; i < body.Members.Count; i++)
             {
-                selected[i] += " AS " + body.Members[i].Name;
+                //selected[i] += " AS " + body.Members[i].Name;
+                addedSelect.Add(new Tuple<string, string, string>(selected[i], " AS ", body.Members[i].Name));
             }
 
             string select = string.Join(", ", selected);
-            source.Sql.Select = select;
+            //source.Sql.Select = select;
+            source.Sql.Select = addedSelect;
             QueryResult<TResult> result = new QueryResult<TResult>(source.Sql);
             return result;
         }
+
         private static QueryResult<TResult> SelectNormal<TSource, TResult>(this QueryResult<TSource> source, Expression<Func<TSource, TResult>> keySelector)
         {
             var body = keySelector.Body as MemberInitExpression;
             if (body == null)
                 throw new Exception("This function is not supported anonymous type.");
 
-            string tableName = QueryHelper.GetTableName<TSource>();
+            //string tableName = QueryHelper.GetTableName<TSource>();
             List<string> selected = new List<string>();
             foreach (var item in body.Bindings)
             {
@@ -393,7 +435,7 @@ namespace ABC.Core
                 expression = expression.Where(e => !string.IsNullOrEmpty(e)).ToArray();
                 int count = expression.Count();
                 if (count == 2)
-                    selected.Add(tableName + "." + expression[count - 1]);
+                    selected.Add(source.Sql.RootTable + "." + expression[count - 1]);
                 else
                 {
                     var slides = item.ToString().Split(new char[] { '.' });
@@ -406,7 +448,7 @@ namespace ABC.Core
             List<string> joinOperator = new List<string>();
 
             foreach (var item in selected)
-                if (string.Compare(tableName, item.Split('.')[0]) != 0)
+                if (string.Compare(source.Sql.RootTable, item.Split('.')[0]) != 0)
                     GetJoinOperation(typeof(TSource), item, ref joinOperator);
 
             source.Sql.AddJoinOperator(joinOperator);
@@ -417,13 +459,16 @@ namespace ABC.Core
                     selected[i] = splited[splited.Count() - 2] + "." + splited.LastOrDefault();
             }
 
+            List<Tuple<string, string, string>> addedSelect = new List<Tuple<string, string, string>>();
             for (int i = 0; i < body.Bindings.Count; i++)
             {
-                selected[i] += " AS " + body.Bindings[i].Member.Name;
+                //selected[i] += " AS " + body.Bindings[i].Member.Name;
+                addedSelect.Add(new Tuple<string, string, string>(selected[i], " AS ", body.Bindings[i].Member.Name));
             }
 
             string select = string.Join(", ", selected);
-            source.Sql.Select = select;
+            //source.Sql.Select = select;
+            source.Sql.Select = addedSelect;
             QueryResult<TResult> result = new QueryResult<TResult>(source.Sql);
             return result;
         }
@@ -432,7 +477,7 @@ namespace ABC.Core
         #region Return results
         public static TSource FirstOrDefault<TSource>(this QueryResult<TSource> source, IDbConnection db)
         {
-            source.Sql.Select = "TOP 1 " + source.Sql.Select;
+            source.Sql.Select_Top = 1;
             var result = db.Query<TSource>(source.Sql.Query, (object)source.Sql.Param).FirstOrDefault();
             return result;
         }
@@ -470,7 +515,6 @@ namespace ABC.Core
 
         private static void GetCondition<T>(string linkOperator, string[] arrUnary, ref string condition, ref SQlQuery query)
         {
-
             switch (arrUnary.FirstOrDefault())
             {
                 case "Not":
@@ -500,7 +544,7 @@ namespace ABC.Core
                                 newProperties += '.';
                             }
                         }
-                        string tableName = QueryHelper.GetTableName<T>();
+                        //string tableName = QueryHelper.GetTableName<T>();
                         GetJoinOperation(typeof(T), newProperties, ref joinOperator);
                         GetWhereOperation(linkOperator, newProperties, ref whereCondition);
                     }
@@ -520,13 +564,11 @@ namespace ABC.Core
                 GetCondition<T>(linkOperator, arrUnary, ref condition, ref query);
         }
 
-
         private static void WalkTree<T>(BinaryExpression body, ExpressionType linkingType, ref SQlQuery query)
         {
             List<QueryParameter> queryProperties = new List<QueryParameter>();
             if (body.NodeType != ExpressionType.AndAlso && body.NodeType != ExpressionType.OrElse)
             {
-                string tableName = QueryHelper.GetTableName<T>();
                 var slides = body.Left.ToString().Split(new char[] { '.' });
                 string[] conditions = new string[slides.Count()];
                 GetExactlyNameParam(typeof(T), slides, ref conditions);
@@ -542,7 +584,7 @@ namespace ABC.Core
                 if (propertyName.Contains('.')) //apply join
                     GetJoinOperation(typeof(T), propertyName, ref joinOperator);
                 else
-                    propertyName = tableName + '.' + propertyName;
+                    propertyName = query.RootTable + '.' + propertyName;
 
                 dynamic propertyValue = body.Right;
                 string opr = GetOperator(body.NodeType);
@@ -573,9 +615,9 @@ namespace ABC.Core
 
             if (elements.Count() > 1)
             {
-                var instance = Activator.CreateInstance(Type.GetType(type.FullName));
+                var instance = GetInstanceOfModels(type); //Activator.CreateInstance(Type.GetType(type.FullName));
                 var destinationProperty = instance.GetType().GetProperty(elements[0]);
-                var destinationInstance = Activator.CreateInstance(Type.GetType(destinationProperty.PropertyType.FullName));
+                var destinationInstance = GetInstanceOfModels(destinationProperty.PropertyType); //Activator.CreateInstance(Type.GetType(destinationProperty.PropertyType.FullName));
                 var attribute = destinationInstance.GetType().GetCustomAttributes(typeof(TableAttribute), true);
 
                 string tableName = string.Empty;
@@ -616,9 +658,15 @@ namespace ABC.Core
             if (binary == null)
                 if (unary != null)
                 {
-                    methodCall = unary.Operand as MethodCallExpression;
-                    string strUnary = methodCall.ToString();
-                    string[] arrUnary = methodCall.ToString().Split('(');
+                    //methodCall = unary.Operand as MethodCallExpression;
+                    //string strUnary = methodCall.ToString();
+                    //string[] arrUnary = methodCall.ToString().Split('(');
+                    //string condition = string.Empty;
+                    //GetCondition<T>(string.Empty, arrUnary, ref condition, ref query);
+
+                    string exp = unary.ToString();
+                    string strUnary = exp.ToString();
+                    string[] arrUnary = exp.ToString().Split('(');
                     string condition = string.Empty;
                     GetCondition<T>(string.Empty, arrUnary, ref condition, ref query);
                 }
@@ -631,17 +679,16 @@ namespace ABC.Core
                     GetCondition<T>(string.Empty, arrUnary, ref condition, ref query);
                 }
             else
-                WalkTree<T>((BinaryExpression)expression, body.NodeType, ref query);
+                WalkTree<T>(binary, body.NodeType, ref query);
             return query;
         }
-
 
         private static void GetJoinOperation(Type rootTableName, string propertyName, ref List<string> joins)
         {
             string[] elements = propertyName.Split(new char[] { '.' });
             string tableName = elements[0];
             PropertyInfo[] table2PInfos = rootTableName.GetProperties();
-            PropertyInfo primaryKeyTable2 = table2PInfos.FirstOrDefault(p => string.Compare(QueryHelper.GetTableName(p.PropertyType), tableName, true) == 0);
+            PropertyInfo primaryKeyTable2 = table2PInfos.FirstOrDefault(p => string.Compare(EXTable.GetTableName(p.PropertyType), tableName, true) == 0);
             string[] keyJoin = GetForeignKeyColumn(rootTableName, primaryKeyTable2.PropertyType);
             StringBuilder joinComment = new StringBuilder();
             joinComment.Append("JOIN ");
@@ -703,7 +750,6 @@ namespace ABC.Core
             }
         }
 
-
         /// <summary>
         /// result[0] = result[1]
         /// </summary>
@@ -711,8 +757,8 @@ namespace ABC.Core
         {
             string[] result = new string[2];
             PropertyInfo[] table1PInfos = table1.GetProperties();
-            string table1NameInDb = QueryHelper.GetTableName(table1);
-            string table2NameInDb = QueryHelper.GetTableName(table2);
+            string table1NameInDb = EXTable.GetTableName(table1);
+            string table2NameInDb = EXTable.GetTableName(table2);
 
             PropertyInfo pForeignKeyInfosTable1 = table1PInfos.FirstOrDefault(p => p.GetCustomAttributes(true)
                 .Any(a => (a as ForeignKeyAttribute) != null && (a as ForeignKeyAttribute).Name == table2NameInDb));
@@ -784,6 +830,30 @@ namespace ABC.Core
 
             return primaryKeyTable1.Name;
         }
+
+        private static List<Tuple<string, object>> _models;
+        private static object GetInstanceOfModels(Type type)
+        {
+            if (_models == null) _models = new List<Tuple<string, object>>();
+
+            if (_models.Any(m => string.Compare(m.Item1, type.FullName, true) == 0))
+            {
+                return _models.FirstOrDefault(m => string.Compare(m.Item1, type.FullName, true) == 0).Item2;
+            }
+            else
+            {
+                Type createdType = Type.GetType(type.FullName);
+                if (createdType == null)
+                {
+                    createdType = Assembly.LoadFrom(Assembly.GetAssembly(type).Location).GetType(type.FullName);
+                }
+
+                var createdObject = Activator.CreateInstance(createdType);
+                _models.Add(new Tuple<string, object>(type.FullName, createdObject));
+                return createdObject;
+            }
+        }
+
         #endregion
     }
 }

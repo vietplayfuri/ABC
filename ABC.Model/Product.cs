@@ -1,6 +1,6 @@
 namespace ABC.Model
 {
-    using Core;
+    using Utility;
     using System.Collections.Generic;
     using System.ComponentModel.DataAnnotations.Schema;
 

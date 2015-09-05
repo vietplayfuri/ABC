@@ -1,5 +1,10 @@
-using System;
-namespace ABC.Core
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+
+namespace ABC.Utility
 {
     /// <summary>
     /// Fields what not included in real database

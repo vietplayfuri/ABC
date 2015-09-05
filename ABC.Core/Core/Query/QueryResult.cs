@@ -29,7 +29,7 @@ namespace ABC.Core
             }
             set { _result.Sql = value; }
         }
-        
+
         public QueryResult(SQlQuery sql)
         {
             _result = new QuerySource<SQlQuery>(sql);
@@ -45,15 +45,55 @@ namespace ABC.Core
 
         public SQlQuery Sql { get; set; }
     }
-    
+
     public class SQlQuery
     {
         public List<string> JoinContidion { get; set; }
-        public List<string> WhereCondition { get; set; }
+
         public List<QueryParameter> QueryParameters { get; set; }
 
-        public string Select { get; set; }
-        public string From { get; set; }
+        /// <summary>
+        /// Customer.Name as customer_name
+        /// Customer.Name - [0]
+        /// customer_name - [1]
+        /// </summary>
+        public List<Tuple<string, string, string>> Select { get; set; }
+        private string SelectCommand
+        {
+            get
+            {
+                List<string> items = new List<string>();
+                foreach (var selectItem in Select)
+                {
+                    items.Add(selectItem.Item1 + selectItem.Item2 + selectItem.Item3);
+                }
+
+                StringBuilder builder = new StringBuilder();
+                builder.Append("SELECT ");
+                builder.Append(this.SELECT_TOP);
+                builder.Append(string.Join(", ", items));
+
+                return builder.ToString();
+            }
+        }
+
+        public int Select_Top { get; set; }
+        private string SELECT_TOP
+        {
+            get
+            {
+                if (Select_Top > 0)
+                    return string.Format("TOP {0} ", Select_Top);
+                return string.Empty;
+            }
+        }
+
+        /// <summary>
+        /// root table 
+        /// </summary>
+        public string RootTable { get; set; }
+        private string From { get { return " FROM " + RootTable; } }
+
         public string Join
         {
             get
@@ -63,6 +103,8 @@ namespace ABC.Core
                 return string.Join(Environment.NewLine, JoinContidion.Distinct());
             }
         }
+
+        public List<string> WhereCondition { get; set; }
         public string SpecialWhere
         {
             get
@@ -72,9 +114,36 @@ namespace ABC.Core
                 return string.Join(" AND ", WhereCondition.Distinct());
             }
         }
+        private string Where
+        {
+            get
+            {
+                StringBuilder builder = new StringBuilder();
+                List<QueryParameter> normalWhere = this.QueryParameters;
+                if (!string.IsNullOrEmpty(SpecialWhere) || (normalWhere != null && normalWhere.Any()))
+                    builder.AppendLine("WHERE");
+                builder.AppendLine(SpecialWhere);
+
+                for (int i = 0; i < normalWhere.Count(); i++)
+                {
+                    QueryParameter item = normalWhere[i];
+                    if (!string.IsNullOrEmpty(SpecialWhere) || (!string.IsNullOrEmpty(item.LinkingOperator) && i > 0))
+                    {
+                        builder.AppendLine(string.Format("{0} {1} {2} @{3} ", item.LinkingOperator, item.PropertyName,
+                                                     item.QueryOperator, item.PropertyName.Replace(".", string.Empty)));
+                    }
+                    else
+                    {
+                        builder.AppendLine(string.Format("{0} {1} @{2} ", item.PropertyName, item.QueryOperator, item.PropertyName.Replace(".", string.Empty)));
+                    }
+                }
+
+                return builder.ToString();
+            }
+        }
 
         public List<string> OrderItems { get; set; }
-        public string OrderBy
+        private string OrderBy
         {
             get
             {
@@ -119,32 +188,12 @@ namespace ABC.Core
             get
             {
                 var builder = new StringBuilder();
-                builder.Append("SELECT " + this.Select + " FROM ");
+                builder.Append(this.SelectCommand);
                 builder.AppendLine(this.From);
                 builder.AppendLine(this.Join);
-
-                List<QueryParameter> normalWhere = this.QueryParameters;
-                if (!string.IsNullOrEmpty(SpecialWhere) || (normalWhere != null && normalWhere.Any()))
-                    builder.AppendLine("WHERE");
-                builder.AppendLine(SpecialWhere);
-                
-                for (int i = 0; i < normalWhere.Count(); i++)
-                {
-                    QueryParameter item = normalWhere[i];
-                    if (!string.IsNullOrEmpty(SpecialWhere) || (!string.IsNullOrEmpty(item.LinkingOperator) && i > 0))
-                    {
-                        builder.AppendLine(string.Format("{0} {1} {2} @{3} ", item.LinkingOperator, item.PropertyName,
-                                                     item.QueryOperator, item.PropertyName.Replace(".", string.Empty)));
-                    }
-                    else
-                    {
-                        builder.AppendLine(string.Format("{0} {1} @{2} ", item.PropertyName, item.QueryOperator, item.PropertyName.Replace(".", string.Empty)));
-                    }
-                }
-
+                builder.AppendLine(this.Where);
                 builder.AppendLine(this.OrderBy);
                 builder.AppendLine(this.Limit);
-
                 return builder.ToString();
             }
         }
@@ -156,8 +205,10 @@ namespace ABC.Core
 
         internal SQlQuery(string tableName)
         {
-            Select = tableName + ".*";
-            From = tableName;
+            if (Select == null)
+                Select = new List<Tuple<string, string, string>>();
+            Select.Add(new Tuple<string, string, string>(tableName, ".", "*"));
+            RootTable = tableName;
             QueryParameters = new List<QueryParameter>();
             JoinContidion = new List<string>();
             WhereCondition = new List<string>();
@@ -201,25 +252,6 @@ namespace ABC.Core
 
             if (!string.IsNullOrEmpty(whereCondition))
                 query.WhereCondition.Add(whereCondition);
-        }
-
-        public static string GetTableName<T>()
-        {
-            var attributes = typeof(T).GetCustomAttributes(typeof(TableAttribute), true);
-            if (attributes.Any())
-                return (attributes[0] as TableAttribute).Name;
-
-            Type type = typeof(T);
-            return type.Name;
-        }
-
-        public static string GetTableName(Type attributeType)
-        {
-            var attributes = attributeType.GetCustomAttributes(typeof(TableAttribute), true);
-            if (attributes.Any())
-                return (attributes[0] as TableAttribute).Name;
-
-            return attributeType.Name;
         }
     }
 }

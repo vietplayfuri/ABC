@@ -9,8 +9,9 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>ABC.Core</RootNamespace>
     <AssemblyName>ABC.Core</AssemblyName>
-    <TargetFrameworkVersion>v4.5.2</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.6</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
+    <TargetFrameworkProfile />
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -45,15 +46,19 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Core\ExtendAttribute\ExtendAttribute.cs" />
     <Compile Include="Core\Helper\DBHelper.cs" />
     <Compile Include="Core\Query\QueryResult.cs" />
-    <Compile Include="Model\Category.cs" />
-    <Compile Include="Model\Customer.cs" />
-    <Compile Include="Model\OrderDetails.cs" />
-    <Compile Include="Model\Orders.cs" />
-    <Compile Include="Model\Product.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\ABC.Model\ABC.Model.csproj">
+      <Project>{099ec293-1bcc-4c8c-86d8-793106ed08de}</Project>
+      <Name>ABC.Model</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\ABC.Utility\ABC.Utility.csproj">
+      <Project>{d27fcb7f-5a7e-440b-b8d7-5be75415248a}</Project>
+      <Name>ABC.Utility</Name>
+    </ProjectReference>
   </ItemGroup>
   <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

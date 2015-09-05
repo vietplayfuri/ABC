@@ -10,3 +10,5 @@ ABC.Model/Properties/
 ABC/Properties/
 ABC.DB/Properties/
 DBForTesting/NORTHWIND.bak
+ABC.Utility/obj/
+ABC.Utility/bin/

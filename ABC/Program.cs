@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Data;
 using System.Data.SqlClient;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -23,46 +24,45 @@ namespace ABC
         public static void DapperConnection()
         {
             string strConnection = @"Server=DELL-PC\SQLEXPRESS;Initial Catalog=NORTHWIND;Persist Security Info=True;User ID=username;Password=password;";
-            
+
             SqlConnection connection = new SqlConnection(strConnection);
             connection.Open();
 
             var db = ((IDbConnection)connection);
 
             #region  Doing
-
-            #endregion
             //Doing
-            var orderDetail = DBHelper.Get<OrderDetails>(x =>
-                   x.Orders.Customer.CustomerID != "100"
-                && x.UnitPrice > 10)
-            .Select(x => new OrderDetails
-            {
-                Discount = x.Discount,
-                OrderID = x.OrderID,
-                Orders = x.Orders,
-                ProductID = x.ProductID,
-                Products = x.Products,
-                Quantity = x.Quantity,
-                UnitPrice = x.UnitPrice
-            })
-            .FirstOrDefault(db);
 
 
-            string test = string.Empty;
+            //var orderDetail = DBHelper.Get<OrderDetails>(x =>
+            //       x.Orders.Customer.CustomerID != "100"
+            //    && x.UnitPrice > 10)
+            //.Select(x => new OrderDetails
+            //{
+            //    Discount = x.Discount,
+            //    OrderID = x.OrderID,
+            //    Orders = x.Orders,
+            //    ProductID = x.ProductID,
+            //    Products = x.Products,
+            //    Quantity = x.Quantity,
+            //    UnitPrice = x.UnitPrice
+            //})
+            //.FirstOrDefault(db);
+            #endregion
+
 
 
             ////Updated - Worked
             //Products product = DBHelper.Get<Products>(p => p.ProductID == 2078).FirstOrDefault(db);
             //product.ProductName = "00000000-0000-0000-0000-0000000000002000";
-            //bool updatedProductId = DBHelper.Update<Products>(product, db);
+            //bool updatedProductId = DBHelper.Update<Products>(db,product);
             //Products newproduct = null;
             //if (updatedProductId)
             //    newproduct = DBHelper.Get<Products>(p => p.ProductID == 2078).FirstOrDefault(db);
             //Console.WriteLine(newproduct.ProductName);
 
-            //Worked
             ////Create entity
+            ////Worked
             //Products created = new Products
             //{
             //    ProductName = "Game GToken",
@@ -76,6 +76,7 @@ namespace ABC
             //    Discontinued = false
             //};
             //var createdProductId = DBHelper.Add<Products>(created,db);            
+
 
             ////Worked
             //var IsNullOrEmpty1 = DBHelper.Get<OrderDetails>(
@@ -101,24 +102,6 @@ namespace ABC
             //var ListOrderWithCondition = DBHelper.Get<OrderDetails>(c => c.Quantity > 10).OrderBy(o => o.OrderID).Skip(10).Take(10).ToList(db);
 
             ////Worked
-            //var ListOrderWithConditionSelect1 = DBHelper.Get<OrderDetails>(c => c.Orders.CustomerID != "")
-            //    .Select(o => new NewTestSelect
-            //    {
-            //        a = o.OrderID,
-            //        b = o.Orders.CustomerID,
-            //        c = o.Products.CategoryID
-            //    }).ToList(db);
-
-            ////Worked
-            //var selectAnynomousType = DBHelper.Get<OrderDetails>(c => !string.IsNullOrEmpty(c.Orders.CustomerID))
-            //    .Select(o => new
-            //    {
-            //        a = o.OrderID,
-            //        b = o.Orders.CustomerID,
-            //        c = o.Products.CategoryID
-            //    }).ToList(db);
-
-            ////Worked
             //var userLogins = DBHelper.Get<OrderDetails>().ToList(db);
 
             ////Worked
@@ -138,6 +121,27 @@ namespace ABC
             //var TestAny1 = DBHelper.Any<Category>(db, x => x.CategoryID == 40);
             ////Worked
             //var TestAny2 = DBHelper.Any<Category>(db);
+
+            //var ListOrderWithConditionSelect1 = DBHelper.Get<OrderDetails>(c => c.Orders.CustomerID != "")
+            //                .OrderBy(x => x.Orders.CustomerID)
+            //                .Select(o => new NewTestSelect
+            //                {
+            //                    a = o.OrderID,
+            //                    b = o.Orders.CustomerID,
+            //                    c = o.Products.CategoryID
+            //                })
+            //                .ToList(db);
+
+            ////Worked
+            //var selectAnynomousType = DBHelper.Get<OrderDetails>(c => !string.IsNullOrEmpty(c.Orders.CustomerID))
+            //    .Select(o => new
+            //    {
+            //        a = o.OrderID,
+            //        b = o.Orders.CustomerID,
+            //        c = o.Products.CategoryID
+            //    })
+            //    .OrderBy(x => x.a)
+            //    .ToList(db);
 
             ////Worked
             //var exists = DBHelper.Get<OrderDetails>(o => o.OrderID == 10248)
